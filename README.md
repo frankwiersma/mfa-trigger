@@ -3,7 +3,7 @@
 
 > Note: For now, this fails when authentication is redirected to ADFS.
 
-### Clone the mfa trigger from our Azure DevOps repository
+### Clone the mfa trigger from this repository
 ```
 git clone https://github.com/frankwiersma/mfa-trigger
 cd ./mfa-trigger
@@ -14,11 +14,7 @@ cd ./mfa-trigger
 docker build -t mfa-trigger .
 ```
 
-### Run the container with username and password as arguments
-```
-docker run -d -p 4444:4444 -v /dev/shm:/dev/shm mfa-trigger "username" "password"
-```
-### in case this results in an error, and yes, for now it does... Then 
+### Run the container
 ```
 docker run -d -p 4444:4444 -v /dev/shm:/dev/shm mfa-trigger
 ```
@@ -47,3 +43,9 @@ python3 /opt/sel/mfa-trigger.py -u "username" -p "password"
 
 # Todo: 
 	- [ ] Add functionality to start MFA-Trigger outside of the container.
+
+__Example:__
+### Run the container with username and password as arguments
+```
+docker run -d -p 4444:4444 -v /dev/shm:/dev/shm mfa-trigger "username" "password"
+```
