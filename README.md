@@ -31,9 +31,8 @@ docker exec <name of running container> bash
 
 ### Run the python script ###
 ```
-python3 /opt/sel/mfa-trigger.py -u "username" -p "password"
+python3 /opt/sel/mfa-trigger.py -u "username" -p "password" --retry True --retrycount 3 --phonenumber "+12312389123" --sendsms True
 ```
-
 
 ## Trigger MFA for multiple users by running multiple Docker containers (to be run outside of the container)
 ```
